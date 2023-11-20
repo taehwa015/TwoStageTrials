@@ -1,0 +1,14 @@
+model
+  {
+    # Model
+    for (i in 1:N) {
+      y[i] ~ dbin( prob[i], n[i] )
+      logit(prob[i]) = theta[i]
+      theta[i] ~ dnorm( mu, tau2[i] ) 
+      tau2[i] ~ dnorm(0, 0.1) T(0,)
+    }
+    
+    # Priors
+    mu ~ dnorm(mu0, 0.1)
+    mu0 = log(0.3/0.7)
+  }
