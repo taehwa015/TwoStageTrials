@@ -2,7 +2,7 @@
 # Sample code for "Incorporating real-world evidence for Bayesian two-stage  # 
 #                  Phase-II single-arm trial for rare diseases"              #
 # Maintainer: Taehwa Choi                                                    #
-# Update: November 19, 2023                                                  #
+# Update: 01/01/2024                                                         #
 ##############################################################################
 library(jagsUI)
 
@@ -12,17 +12,33 @@ sampler <- function(response, stage.size, model.file, niter, nburn, nchain = 2, 
   jags_data <- list( "y" = response[idst], 
                      "N" = length(response[idst]), 
                      "n" = stage.size[idst] ) 
-  jags_inits <- function() list("mu" = 1, "tau2" = rep(1, jags_data$N))
-  params <- c("prob","mu","tau2")
+  jags_inits <- function() list("mu" = 1, "tau21" = 1)
+  params <- c("prob", "mu", "tau21")
   jags_fit <- jags(data = jags_data, inits = jags_inits, 
-                           parameters.to.save = params, 
-                           model.file = model.file, 
-                           n.chains = nchain, n.iter = niter, verbose = FALSE,
-                           n.burnin = nburn, n.thin = nthin)
-  ww <- jags_fit$sims.list$tau2
-  pooled <- rowSums((ww*jags_fit$sims.list$prob))/rowSums(ww)
+                   parameters.to.save = params, 
+                   model.file = model.file, 
+                   n.chains = nchain, n.iter = niter, verbose = FALSE,
+                   n.burnin = nburn, n.thin = nthin)
   
-  list(post.p = pooled, 
+  list(post.p = plogis(jags_fit$sims.list$mu), 
+       max.rhat = max(unlist(jags_fit$Rhat)),
+       jags_fit = jags_fit)
+}
+
+sampler_ext <- function(response, stage.size, model.file, niter, nburn, nchain = 2, nthin = 1) {
+  idst <- stage.size != 0
+  jags_data <- list( "y" = response[idst], 
+                     "N" = length(response[idst]), 
+                     "n" = stage.size[idst] ) 
+  jags_inits <- function() list("mu" = 1, "tau21" = 1, "tau22" = 1)
+  params <- c("prob", "mu", "tau21", "tau22")
+  jags_fit <- jags(data = jags_data, inits = jags_inits, 
+                   parameters.to.save = params, 
+                   model.file = model.file, 
+                   n.chains = nchain, n.iter = niter, verbose = FALSE,
+                   n.burnin = nburn, n.thin = nthin)
+  
+  list(post.p = plogis(jags_fit$sims.list$mu), 
        max.rhat = max(unlist(jags_fit$Rhat)),
        jags_fit = jags_fit)
 }
@@ -34,7 +50,7 @@ resfun <- function(fit, h0, delta) {
   PET <- mean(fit$post.p < 0.1)
   Decision <- ifelse(mean(fit$post.p > 0.1) < 0.15, "No-go", "Go")
   
-  data.frame(Gelman.Rubin, Pooled.p, PET, Decision)
+  data.frame(Pooled.p, Gelman.Rubin, PET, Decision)
 }
 
 # Example 1
@@ -64,9 +80,9 @@ resfun(fit = jags, h0 = 0.1, delta = 0.15)
 set.seed(1)
 response3 <- c(5, 1, 2, 0, 1)
 stage.size3 <- c(6, 7, 5, 2, 4)
-jags <- sampler(response = response3, 
-                stage.size = stage.size3, 
-                model.file = "model_ext.jags",
-                niter = niter, 
-                nburn = nburn)
+jags <- sampler_ext(response = response3, 
+                    stage.size = stage.size3, 
+                    model.file = "model_ext.jags",
+                    niter = niter, 
+                    nburn = nburn)
 resfun(fit = jags, h0 = 0.1, delta = 0.15)
